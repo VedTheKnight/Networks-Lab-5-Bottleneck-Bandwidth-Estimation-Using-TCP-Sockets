@@ -89,14 +89,14 @@ int main(int argc, char *argv[]) {
         }
         end_time = get_time();
         printf("Received second packet stopped timer\n");
-        double time_diff_ms = time_diff_us(start_time, end_time, frequency)*1000;
-        
+        double time_diff_microsec = time_diff_us(start_time, end_time, frequency);
+
         int packet_id;
         sscanf(buffer, "Packet ID: %d", &packet_id);  // Extract the packet ID from the buffer
         // Print the packet ID and time difference
         printf("Received packet ID: %d\n", packet_id);
 
-        fprintf(file, "P/(t2 - t1) = %f Mbps\n", 8.0 / time_diff_ms);
+        fprintf(file, "P/(t2 - t1) = %f Mbps\n", 8000 / time_diff_microsec);
     }
 
     fclose(file);
