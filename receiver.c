@@ -14,6 +14,18 @@ void error_exit(const char *message) {
     exit(EXIT_FAILURE);
 }
 
+// Function to get the current time in high resolution
+LARGE_INTEGER get_time() {
+    LARGE_INTEGER time;
+    QueryPerformanceCounter(&time);
+    return time;
+}
+
+// Function to calculate the time difference in microseconds
+double time_diff_us(LARGE_INTEGER start, LARGE_INTEGER end, LARGE_INTEGER freq) {
+    return (double)(end.QuadPart - start.QuadPart) * 1000000.0 / freq.QuadPart;
+}
+
 int main(int argc, char *argv[]) {
     if (argc != 2) {
         printf("Usage: %s <output text file>\n", argv[0]);
@@ -21,7 +33,9 @@ int main(int argc, char *argv[]) {
     }
 
     const char *output_file = argv[1];
-
+    LARGE_INTEGER start_time, end_time, frequency;
+    // Get the frequency of the high-resolution performance counter
+    QueryPerformanceFrequency(&frequency);
     // Initialize Winsock
     WSADATA wsaData;
     if (WSAStartup(MAKEWORD(2, 2), &wsaData) != 0) {
@@ -63,20 +77,24 @@ int main(int argc, char *argv[]) {
     // Receive packets and calculate spacing between pairs
     for (int i = 0; i < 100; i++) {
         
-         // Receive first packet in pair (c)
-        recvfrom(sockfd, buffer, BUFFER_SIZE, 0, (struct sockaddr *)&recv_addr, &len);
-        gettimeofday(&t1, NULL);  // Measure time of first packet (d)
-        int packet_num1 = atoi(buffer);
-
-        // Receive second packet in pair
-        recvfrom(sockfd, buffer, BUFFER_SIZE, 0, (struct sockaddr *)&recv_addr, &len);
-        gettimeofday(&t2, NULL);  // Measure time of second packet (d)
-        int packet_num2 = atoi(buffer);
-
-        if (packet_num2 == packet_num1 + 1) {  // Ensure both packets in pair received
-            long time_diff_us = (t2.tv_sec - t1.tv_sec) * 1000000L + (t2.tv_usec - t1.tv_usec);
-            fprintf(file, "%.6f\n", (double)packet_size_bits / time_diff_us);
+        if (recvfrom(sock, buffer, sizeof(buffer), 0, (struct sockaddr *)&client_addr, &client_addr_len) == SOCKET_ERROR) {
+            printf("Failed to receive packet\n");
+            continue;
         }
+        printf("Received first packet starting timer\n");
+        start_time = get_time();
+        if (recvfrom(sock, buffer, sizeof(buffer), 0, (struct sockaddr *)&client_addr, &client_addr_len) == SOCKET_ERROR) {
+            printf("Failed to receive packet\n");
+            continue;
+        }
+        end_time = get_time();
+        printf("Received second packet stopped timer\n");
+        double time_diff_ms = time_diff_us(start_time, end_time, frequency)*1000;
+        
+        int packet_id;
+        sscanf(buffer, "Packet ID: %d", &packet_id);  // Extract the packet ID from the buffer
+        // Print the packet ID and time difference
+        printf("Received packet ID: %d\n", packet_id);
 
         fprintf(file, "P/(t2 - t1) = %f Mbps\n", 8.0 / time_diff_ms);
     }
