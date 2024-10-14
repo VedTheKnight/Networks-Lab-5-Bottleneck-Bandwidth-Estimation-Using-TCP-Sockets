@@ -62,14 +62,22 @@ int main(int argc, char *argv[]) {
 
     // Receive packets and calculate spacing between pairs
     for (int i = 0; i < 100; i++) {
-        t1 = clock();
-        if (recvfrom(sock, buffer, sizeof(buffer), 0, (struct sockaddr *)&client_addr, &client_addr_len) == SOCKET_ERROR) {
-            printf("Failed to receive packet\n");
-            continue;
+        
+         // Receive first packet in pair (c)
+        recvfrom(sockfd, buffer, BUFFER_SIZE, 0, (struct sockaddr *)&recv_addr, &len);
+        gettimeofday(&t1, NULL);  // Measure time of first packet (d)
+        int packet_num1 = atoi(buffer);
+
+        // Receive second packet in pair
+        recvfrom(sockfd, buffer, BUFFER_SIZE, 0, (struct sockaddr *)&recv_addr, &len);
+        gettimeofday(&t2, NULL);  // Measure time of second packet (d)
+        int packet_num2 = atoi(buffer);
+
+        if (packet_num2 == packet_num1 + 1) {  // Ensure both packets in pair received
+            long time_diff_us = (t2.tv_sec - t1.tv_sec) * 1000000L + (t2.tv_usec - t1.tv_usec);
+            fprintf(file, "%.6f\n", (double)packet_size_bits / time_diff_us);
         }
 
-        t2 = clock();
-        double time_diff_ms = ((double)(t2 - t1) / CLOCKS_PER_SEC) * 1000;
         fprintf(file, "P/(t2 - t1) = %f Mbps\n", 8.0 / time_diff_ms);
     }
 

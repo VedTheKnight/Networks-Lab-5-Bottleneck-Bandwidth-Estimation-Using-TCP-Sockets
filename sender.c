@@ -53,7 +53,9 @@ int main(int argc, char *argv[]) {
     }
 
     for (int i = 0; i < num_packet_pairs; i++) {
-        sprintf(packet, "Packet #%d", i + 1);
+        // Set packet ID (as a string, or you can use binary format)
+        snprintf(packet, packet_size_bytes, "Packet ID: %d", i + 1);
+        printf(packet, "Packet #%d", i + 1);
 
         // Send first packet of the pair
         if (sendto(sock, packet, packet_size_bytes, 0, (struct sockaddr *)&server_addr, sizeof(server_addr)) == SOCKET_ERROR) {
