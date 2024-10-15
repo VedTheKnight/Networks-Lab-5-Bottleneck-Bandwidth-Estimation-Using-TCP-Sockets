@@ -5,7 +5,6 @@
 #include <arpa/inet.h>
 #include <sys/time.h>
 
-// Function to get the current time in microseconds
 long get_current_time() {
     struct timeval time_now;
     gettimeofday(&time_now, NULL);
@@ -13,57 +12,88 @@ long get_current_time() {
 }
 
 int main(int argc, char *argv[]) {
-    if (argc != 5) {
-        printf("Usage: %s <packet size in bits> <destination IP> <spacing (ms)> <total pairs>\n", argv[0]);
+    if (argc != 2) {
+        printf("Usage: %s <output file>\n", argv[0]);
         return 1;
     }
 
-    int packet_size = atoi(argv[1]) / 8; // Convert size from bits to bytes
-    char *dest_ip = argv[2];
-    int spacing_ms = atoi(argv[3]);
-    int total_pairs = atoi(argv[4]);
+    FILE *output_file = fopen(argv[1], "w");
+    if (!output_file) {
+        perror("Could not open output file");
+        return 1;
+    }
 
     int sockfd;
-    struct sockaddr_in receiver_addr;
-    char *packet;
-    long start_time, send_time;
+    struct sockaddr_in server_addr, sender_addr;
+    char buffer[1024];
+    socklen_t addr_len = sizeof(sender_addr);
+    long recv_time_1, recv_time_2;
+    int packet_count = 0;
 
     // (a) Create Datagram Socket
-    sockfd = socket(AF_INET, SOCK_DGRAM, 0); // AF_INET = IPv4, SOCK_DGRAM = UDP
+    sockfd = socket(AF_INET, SOCK_DGRAM, 0);
     if (sockfd < 0) {
         perror("Socket creation failed");
-        exit(EXIT_FAILURE);
+        return 1;
     }
 
-    memset(&receiver_addr, 0, sizeof(receiver_addr));
-    receiver_addr.sin_family = AF_INET;
-    receiver_addr.sin_port = htons(8081); // Use any port number (you can change this)
-    receiver_addr.sin_addr.s_addr = inet_addr(dest_ip);
+     memset(&server_addr, 0, sizeof(server_addr));
+    server_addr.sin_family = AF_INET;
+    server_addr.sin_port = htons(8081);  // Use the same port number as the sender
+    server_addr.sin_addr.s_addr = INADDR_ANY;
 
-    // Allocate memory for the packet
-    packet = malloc(packet_size);
+    // Bind the socket to the port
+    if (bind(sockfd, (struct sockaddr *)&server_addr, sizeof(server_addr)) < 0) {
+        perror("Bind failed");
+        return 1;
+    }
 
-    // Sending packets in pairs
-    for (int i = 1; i <= total_pairs * 2; i++) {
-        memset(packet, 0, packet_size);
-
-        sprintf(packet, "Packet %d", i%(2*total_pairs));  // Include packet number in the data
-
-
-        // (b) Send/write data to the socket
-        send_time = get_current_time();
-        if (sendto(sockfd, packet, packet_size, 0, (struct sockaddr *)&receiver_addr, sizeof(receiver_addr)) < 0) {
-            perror("sendto failed");
-            exit(EXIT_FAILURE);
+    // Receive packets in pairs
+    while (1) {
+        // (c) Read data from the socket
+        int n = recvfrom(sockfd, buffer, sizeof(buffer), 0, (struct sockaddr *)&sender_addr, &addr_len);
+        if (n < 0) {
+            perror("recvfrom failed");
+            break;
         }
 
-        // For odd packets (first in a pair), send the next packet immediately
-        if (i % 2 == 0) {
-            usleep(spacing_ms * 1000); // Wait between pairs
+        recv_time_1 = get_current_time();
+        packet_count++;
+
+        // Receive the second packet of the pair
+        n = recvfrom(sockfd, buffer, sizeof(buffer), 0, (struct sockaddr *)&sender_addr, &addr_len);
+        if (n < 0) {
+            perror("recvfrom failed");
+            break;
+        }
+
+        recv_time_2 = get_current_time();
+        packet_count++;
+        // Extract the packet ID (assuming it's at the start of the buffer)
+        int packet_id;
+        if (sscanf(buffer, "Packet %d", &packet_id) == 1){
+            int packet_id_temp;
+            if(packet_id == 0)
+                packet_id_temp = packet_count;
+            else
+                packet_id_temp = packet_id;
+            printf("Received packet pair number : %d\n", packet_id_temp/2);
+        }
+        else{
+            printf("Received packet with unknown format\n");
+        }
+
+        // (d) Measure the time of arrival of packets and compute P/(t2 - t1)
+        long time_difference = recv_time_2 - recv_time_1;
+        fprintf(output_file, "P/(t1-t2) = %f Mbps\n", 8000.0/time_difference); // Log the bit rate
+        //printf("P/(t1-t2) = %f Mbps\n", 8000.0/time_difference); // Log the bit rate
+
+        if(packet_id == 0){
+           break;
         }
     }
 
-    free(packet);
+    fclose(output_file);
     close(sockfd);
     return 0;
 }
