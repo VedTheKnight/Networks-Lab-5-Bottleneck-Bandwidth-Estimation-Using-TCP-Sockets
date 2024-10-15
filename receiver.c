@@ -1,118 +1,69 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <winsock2.h>
-#include <ws2tcpip.h>
-#include <time.h>
+#include <unistd.h>
+#include <arpa/inet.h>
 #include <sys/time.h>
 
-#pragma comment(lib, "ws2_32.lib")  // Link Winsock library
-
-#define DEFAULT_PORT 8080
-
-void error_exit(const char *message) {
-    fprintf(stderr, "%s\n", message);
-    exit(EXIT_FAILURE);
+// Function to get the current time in microseconds
+long get_current_time() {
+    struct timeval time_now;
+    gettimeofday(&time_now, NULL);
+    return (time_now.tv_sec * 1000000) + time_now.tv_usec;
 }
-
-// Function to get the current time in high resolution
-LARGE_INTEGER get_time() {
-    LARGE_INTEGER time;
-    QueryPerformanceCounter(&time);
-    return time;
-}
-
-// Function to calculate the time difference in microseconds
-double time_diff_us(LARGE_INTEGER start, LARGE_INTEGER end, LARGE_INTEGER freq) {
-    return (double)(end.QuadPart - start.QuadPart) * 1000000.0 / freq.QuadPart;
-}
-
-// struct timeval GetTimeStamp() {
-//     struct timeval tv;
-//     gettimeofday(&tv,NULL);
-//     return tv;
-// }
 
 int main(int argc, char *argv[]) {
-    if (argc != 2) {
-        printf("Usage: %s <output text file>\n", argv[0]);
+    if (argc != 5) {
+        printf("Usage: %s <packet size in bits> <destination IP> <spacing (ms)> <total pairs>\n", argv[0]);
         return 1;
     }
 
-    const char *output_file = argv[1];
-    LARGE_INTEGER start_time, end_time, frequency;
-    // Get the frequency of the high-resolution performance counter
-    QueryPerformanceFrequency(&frequency);
-    // Initialize Winsock
-    WSADATA wsaData;
-    if (WSAStartup(MAKEWORD(2, 2), &wsaData) != 0) {
-        error_exit("WSAStartup failed");
+    int packet_size = atoi(argv[1]) / 8; // Convert size from bits to bytes
+    char *dest_ip = argv[2];
+    int spacing_ms = atoi(argv[3]);
+    int total_pairs = atoi(argv[4]);
+
+    int sockfd;
+    struct sockaddr_in receiver_addr;
+    char *packet;
+    long start_time, send_time;
+
+    // (a) Create Datagram Socket
+    sockfd = socket(AF_INET, SOCK_DGRAM, 0); // AF_INET = IPv4, SOCK_DGRAM = UDP
+    if (sockfd < 0) {
+        perror("Socket creation failed");
+        exit(EXIT_FAILURE);
     }
 
-    // Create socket
-    SOCKET sock = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
-    if (sock == INVALID_SOCKET) {
-        WSACleanup();
-        error_exit("Socket creation failed");
-    }
+    memset(&receiver_addr, 0, sizeof(receiver_addr));
+    receiver_addr.sin_family = AF_INET;
+    receiver_addr.sin_port = htons(8081); // Use any port number (you can change this)
+    receiver_addr.sin_addr.s_addr = inet_addr(dest_ip);
 
-    // Set up local address to bind to
-    struct sockaddr_in server_addr;
-    memset(&server_addr, 0, sizeof(server_addr));
-    server_addr.sin_family = AF_INET;
-    server_addr.sin_port = htons(DEFAULT_PORT);
-    server_addr.sin_addr.s_addr = INADDR_ANY;
+    // Allocate memory for the packet
+    packet = malloc(packet_size);
 
-    if (bind(sock, (struct sockaddr *)&server_addr, sizeof(server_addr)) == SOCKET_ERROR) {
-        closesocket(sock);
-        WSACleanup();
-        error_exit("Bind failed");
-    }
+    // Sending packets in pairs
+    for (int i = 1; i <= total_pairs * 2; i++) {
+        memset(packet, 0, packet_size);
 
-    FILE *file = fopen(output_file, "w");
-    if (!file) {
-        closesocket(sock);
-        WSACleanup();
-        error_exit("Failed to open output file");
-    }
+        sprintf(packet, "Packet %d", i%(2*total_pairs));  // Include packet number in the data
 
-    char buffer[1024];
-    struct sockaddr_in client_addr;
-    int client_addr_len = sizeof(client_addr);
-    clock_t t1, t2;
 
-    // Receive packets and calculate spacing between pairs
-    for (int i = 0; i < 100; i++) {
-        
-        if (recvfrom(sock, buffer, sizeof(buffer), 0, (struct sockaddr *)&client_addr, &client_addr_len) == SOCKET_ERROR) {
-            printf("Failed to receive packet\n");
-            continue;
+        // (b) Send/write data to the socket
+        send_time = get_current_time();
+        if (sendto(sockfd, packet, packet_size, 0, (struct sockaddr *)&receiver_addr, sizeof(receiver_addr)) < 0) {
+            perror("sendto failed");
+            exit(EXIT_FAILURE);
         }
-        struct timeval tv;
-        gettimeofday(&tv,NULL);
-        unsigned long start_time_in_micros = 1000000 * tv.tv_sec + tv.tv_usec;
-        printf("Received first packet starting timer\n");
-        // start_time = get_time();
-        if (recvfrom(sock, buffer, sizeof(buffer), 0, (struct sockaddr *)&client_addr, &client_addr_len) == SOCKET_ERROR) {
-            printf("Failed to receive packet\n");
-            continue;
+
+        // For odd packets (first in a pair), send the next packet immediately
+        if (i % 2 == 0) {
+            usleep(spacing_ms * 1000); // Wait between pairs
         }
-        // end_time = get_time();
-        gettimeofday(&tv,NULL);
-        unsigned long end_time_in_micros = 1000000 * tv.tv_sec + tv.tv_usec;
-        printf("Received second packet stopped timer\n");
-        unsigned long time_diff_microsec = end_time_in_micros-start_time_in_micros;
-
-        int packet_id;
-        sscanf(buffer, "Packet ID: %d", &packet_id);  // Extract the packet ID from the buffer
-        // Print the packet ID and time difference
-        printf("Received packet ID: %d\n", packet_id);
-
-        fprintf(file, "P/(t2 - t1) = %f Mbps\n", 8000 / double(time_diff_microsec));
     }
 
-    fclose(file);
-    closesocket(sock);
-    WSACleanup();
+    free(packet);
+    close(sockfd);
     return 0;
 }
