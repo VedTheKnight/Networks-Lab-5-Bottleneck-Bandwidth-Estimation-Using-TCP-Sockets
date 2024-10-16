@@ -1,3 +1,5 @@
+// References : ChatGPT
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -30,14 +32,13 @@ int main(int argc, char *argv[]) {
     long recv_time_1, recv_time_2;
     int packet_count = 0;
 
-    // (a) Create Datagram Socket
     sockfd = socket(AF_INET, SOCK_DGRAM, 0);
     if (sockfd < 0) {
         perror("Socket creation failed");
         return 1;
     }
 
-     memset(&server_addr, 0, sizeof(server_addr));
+    memset(&server_addr, 0, sizeof(server_addr));
     server_addr.sin_family = AF_INET;
     server_addr.sin_port = htons(8081);  // Use the same port number as the sender
     server_addr.sin_addr.s_addr = INADDR_ANY;
@@ -50,7 +51,7 @@ int main(int argc, char *argv[]) {
 
     // Receive packets in pairs
     while (1) {
-        // (c) Read data from the socket
+        // Read data from the socket
         int n = recvfrom(sockfd, buffer, sizeof(buffer), 0, (struct sockaddr *)&sender_addr, &addr_len);
         if (n < 0) {
             perror("recvfrom failed");
@@ -83,7 +84,7 @@ int main(int argc, char *argv[]) {
             printf("Received packet with unknown format\n");
         }
 
-        // (d) Measure the time of arrival of packets and compute P/(t2 - t1)
+        // Measure the time of arrival of packets and compute P/(t2 - t1)
         long time_difference = recv_time_2 - recv_time_1;
         fprintf(output_file, "P/(t1-t2) = %f Mbps\n", 8000.0/time_difference); // Log the bit rate
         //printf("P/(t1-t2) = %f Mbps\n", 8000.0/time_difference); // Log the bit rate

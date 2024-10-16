@@ -1,3 +1,5 @@
+// References : ChatGPT
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -28,7 +30,7 @@ int main(int argc, char *argv[]) {
     char *packet;
     long start_time, send_time;
 
-    // (a) Create Datagram Socket
+    // Create Datagram Socket
     sockfd = socket(AF_INET, SOCK_DGRAM, 0); // AF_INET = IPv4, SOCK_DGRAM = UDP
     if (sockfd < 0) {
         perror("Socket creation failed");
@@ -50,7 +52,7 @@ int main(int argc, char *argv[]) {
         sprintf(packet, "Packet %d", i%(2*total_pairs));  // Include packet number in the data
 
 
-        // (b) Send/write data to the socket
+        // Send/write data to the socket
         send_time = get_current_time();
         if (sendto(sockfd, packet, packet_size, 0, (struct sockaddr *)&receiver_addr, sizeof(receiver_addr)) < 0) {
             perror("sendto failed");
