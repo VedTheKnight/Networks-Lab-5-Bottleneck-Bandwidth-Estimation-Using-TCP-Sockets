@@ -24,6 +24,18 @@ In the report all simulations have been run using the following parameters
 
 ./sender 8000 <ip-address> 1000 100
 
+For expiriment 1, the commands utilized in setting the rate limit where
+
+sudo tc qdisc add dev lo root tbf rate 10mbit burst 9kbit latency 50ms
+
+To verify you can use
+
+sudo tc qdisc show dev lo
+
+and to remove the changes once the experiment is over
+
+sudo tc qdisc del dev lo root
+
 REFERENCES
 
 ChatGPT was utilized in building the tool.
